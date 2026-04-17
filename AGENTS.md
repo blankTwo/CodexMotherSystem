@@ -105,6 +105,9 @@
 ## UI Task Routing
 若任务包含以下意图：
 - 新增页面
+- 新建页面
+- 新建列表/表单/详情页
+- 从 0 到 1 搭建页面 UI
 - 优化 UI
 - 美化
 - 统一样式
@@ -112,12 +115,13 @@
 - 调整布局
 
 则必须额外执行以下检查：
-1. 先查看项目中相似页面
+1. 优先查看项目中相似页面；若不存在，再使用默认产品化结构
 2. 优先读取 `rules/ui-consistency.md`
-3. 如属于 UI 优化任务，优先选择 `skills/ui-refine/`
-4. 如属于 React 新页面任务，同时组合使用：
-   - `skills/feature-react/`
-   - `skills/ui-refine/`
+3. 如属于新建页面、新建功能 UI、缺少参考页面时的 0 到 1 UI 生成，优先选择 `skills/feature-ui/`
+4. 如属于 UI 优化、风格统一、去除原生拼装感，优先选择 `skills/ui-refine/`
+5. 如属于前端新页面任务，在使用 `skills/feature-ui/` 的同时，组合使用：
+   - `skills/feature-ui/`
+   - 当前项目技术栈对应的实现 skill
 
 新增页面时，默认要求：
 - 先对齐已有页面风格
