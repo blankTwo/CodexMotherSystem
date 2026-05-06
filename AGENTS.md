@@ -262,16 +262,19 @@ Quality Assurance:
 
 则必须额外执行以下检查：
 1. 优先查看项目中相似页面；若不存在，再使用默认产品化结构
-2. 优先读取 `rules/ui-consistency.md`
-3. 如属于新建页面、新建功能 UI、缺少参考页面时的 0 到 1 UI 生成，优先选择 `skills/feature-ui/`
-4. 如属于 UI 优化、风格统一、去除原生拼装感，优先选择 `skills/ui-refine/`
-5. 如属于 UI 新建任务，在使用 `skills/feature-ui/` 的同时，组合使用：
+2. 优先读取 `rules/ui-design-system.md`，建立字号、间距、组件尺寸、viewport 和 token 基线
+3. 再读取 `rules/ui-consistency.md`，对齐项目已有页面、组件和 Tailwind 写法
+4. 如属于新建页面、新建功能 UI、缺少参考页面时的 0 到 1 UI 生成，优先选择 `skills/feature-ui/`
+5. 如属于 UI 优化、风格统一、去除原生拼装感，优先选择 `skills/ui-refine/`
+6. 如属于 UI 新建任务，在使用 `skills/feature-ui/` 的同时，组合使用：
    - `skills/feature-ui/`
    - 当前项目技术栈对应的实现约束或现有实现模式
 
 新增页面时，默认要求：
 - 先对齐已有页面风格
 - 优先复用组件
+- 遵循 design tokens、8pt grid、type scale、组件尺寸和常见 viewport 基线
+- 单任务页面避免由过大字号、过大 padding 或装饰区导致无意义滚动
 - 避免任意值 Tailwind
 - 不得凭空发明新的视觉规范
 
