@@ -57,7 +57,8 @@
 ## Stack Detection
 开始任务时，还必须识别技术栈。技术栈用于确定实现约束、代码风格和可加载 rules，不直接决定 skill。
 
-优先根据以下信号判断：
+### Stack Signals
+根据以下信号识别候选技术栈：
 - React / Vue / Svelte: package.json / src / jsx / tsx / vue / svelte / router / state libraries
 - Node: express / koa / nest / scripts / server / drizzle / pg
 - Taro / Mini Program: taro / app.config / pages / cloud functions
@@ -66,6 +67,25 @@
 - Python: pyproject.toml / requirements.txt / fastapi / django / flask
 - Rust: Cargo.toml / src / crates
 - Unknown: 无法识别时走通用流程
+
+### Detection Priority
+按以下顺序判断主栈与影响栈：
+1. 任务影响范围优先：用户指定的文件、目录、模块、报错位置或需求范围优先于全仓统计
+2. 项目结构：apps / packages / client / server / frontend / backend / src / cmd / internal 等目录用于判断子项目或层
+3. 主配置与依赖：package.json / pom.xml / go.mod / Cargo.toml / pyproject.toml 等主配置优先于工具配置
+4. 入口与约定文件：App.tsx / main.ts / server.ts / controller / router / app.config 等用于辅助确认
+5. 文件数量：仅在前四项仍不明确时，用文件类型分布作为弱信号
+
+### Confidence
+- 高置信：任务影响范围、目录结构、主配置或依赖信号一致；可以直接加载对应 rules
+- 中置信：能判断本次影响栈，但项目存在多个技术栈或主栈不唯一；加载影响栈 rules，并按需要补充相邻栈 rules
+- 低置信：信号冲突、缺少路径上下文、无法判断子项目边界；必须先读取 project memory，仍不明确时再询问用户
+
+### Multi-Stack Patterns
+- Monorepo: 检测 apps / packages / services 等目录，按任务路径判断子项目技术栈
+- 前后端分离同仓: 检测 frontend / backend、client / server 等目录，按任务路径判断影响栈
+- 全栈同目录: 根据文件路径、入口文件和任务层判断影响栈，不把 package.json 中的所有依赖都当作本次影响栈
+- 移动端 + 后端同仓: 检测 app / miniapp / taro / cloud / server 等目录，按任务路径和任务层组合判断
 
 识别后按需加载对应 rules：
 - React -> rules/frontend-react.md
@@ -79,6 +99,13 @@
 - 再按任务需要补充其他 stack 的 rules
 - 不因“可能相关”一次性加载全部 rules
 - 不因为出现新技术栈就新增 stack-specific skill
+
+若检测失败或置信度低：
+- 标记为 Unknown 或 Multi-stack uncertain
+- 只加载通用 rules 与任务层 skill
+- 优先读取 memory/projects/{project}.md 中的 Stack / Architecture 记录
+- 仍无法确认时，说明已发现的信号与冲突点，并向用户确认本次任务主要影响的栈
+- 用户确认后，必要时写入 project memory，避免后续重复判断
 
 ---
 
@@ -159,6 +186,7 @@ Quality Assurance:
 - 是否建议或必须 TDD
 - 是否需要 review gate
 - 是否需要更高验证强度
+- 是否需要 performance check
 
 ### Validation Gate
 任务完成前必须说明：
@@ -168,6 +196,28 @@ Quality Assurance:
 - 还剩什么风险
 
 如果无法执行验证，必须说明原因，并给出最小可行验证方案。
+
+验证失败时必须先记录失败证据，再判断失败类型：
+- 实现问题：代码逻辑、状态流、数据处理或接口契约不符合预期
+- 测试问题：测试断言、测试数据、mock 或测试环境本身不正确
+- 环境问题：依赖、配置、权限、外部服务或本地运行条件缺失
+- 需求理解问题：实现方向与用户目标或真实行为不一致
+
+验证失败处理：
+- 首次失败：定位根因，针对性修复后再次验证
+- 二次失败：检查是否遗漏边界条件、依赖关系或任务层判断
+- 连续失败 >= 3 次：停止扩大修改，列出已尝试方案和失败原因，重新分析整体方案；必要时回滚到稳定状态或请求用户确认
+
+部分通过处理：
+- 核心路径失败：不得视为完成
+- 核心路径通过但边界失败：必须说明影响范围，并优先修复
+- 核心路径通过但外部环境无法验证：可以交付，但必须标记剩余风险和手工验证步骤
+
+无法验证处理：
+- 说明缺失条件
+- 给出可执行的手工验证步骤
+- 标记待验证项与剩余风险
+- 若对项目后续有影响，写入 project memory 的 Pending Validation 或 Detailed Records
 
 ### Memory Gate
 任务结束时必须判断：
@@ -234,10 +284,11 @@ Quality Assurance:
 2. rules/coding-style.md
 3. rules/testing.md
 4. rules/change-policy.md
-5. 对应技术栈 rules
-6. 对应 skills
-7. memory/global/preferences.md
-8. memory/projects/{project}.md
+5. rules/review-gate.md（仅在触发 review gate 时）
+6. 对应技术栈 rules
+7. 对应 skills
+8. memory/global/preferences.md
+9. memory/projects/{project}.md
 
 如有冲突，优先级从上到下递减。
 
@@ -286,6 +337,21 @@ plan 必须包含：
 - 可能影响已有用户数据或线上运行环境
 - 依赖升级或构建链路调整
 
+### When Performance Check Is Required
+Performance 不作为独立 gate，而是 Risk Gate 与 Validation Gate 的专项检查。
+
+遇到以下任务，必须判断性能基线、目标和回归风险：
+- 用户明确要求性能优化
+- 涉及大数据处理、高并发、复杂算法或批量任务
+- 修改核心数据流、渲染路径、接口热点、关键查询或缓存策略
+- 重构可能改变时间复杂度、空间复杂度、调用频率或渲染频率
+
+Performance Check 至少说明：
+- 当前性能基线或可观察现状
+- 预期目标或不应退化的指标
+- 验证方式：benchmark / profiling / 压测 / 构建产物对比 / 手工可观察指标
+- 若无法量化，说明原因并给出替代观察方式
+
 ### When TDD Is Recommended
 TDD 判断遵循 `rules/testing.md`：
 - 核心业务逻辑、数据处理、复杂边界条件优先测试先行
@@ -299,6 +365,8 @@ TDD 判断遵循 `rules/testing.md`：
 - 大规模重构或架构调整
 - 发布前关键变更
 - 修改 rules / skills / AGENTS 等母体核心文件
+
+Review Gate 执行规范见 `rules/review-gate.md`。
 
 ---
 
@@ -330,6 +398,33 @@ Project Memory 至少应区分两类信息：
 - Summary: 供任务开始阶段快速加载的摘要信息
 - Detailed Records: 供实现前进一步读取的决策、坑点、模式、演化候选
 
+### Memory Writing Standard
+满足以下任一条件，才建议写入 project memory：
+- 发现项目特定约束、架构决策、主技术栈或关键依赖
+- 遇到非常规问题，并形成已验证的解决方案
+- 验证失败后的根因、修复路径或待验证项会影响后续任务
+- 出现可能复用但证据不足的演化候选
+- 用户明确要求记录
+
+以下内容通常不写入 memory：
+- 普通成功路径
+- 一次性操作或探索性验证
+- 未验证猜测、临时偏好或主观审美
+- 强业务耦合的临时方案
+- 已由现有 rules / skills 覆盖的常规流程
+
+### Candidate Marker
+可能值得升级但证据不足的经验，先在 project memory 中标记：
+- `[candidate-skill]`: 可能升级为 skill
+- `[candidate-rule]`: 可能升级为 rule
+
+Candidate 必须记录：
+- Trigger: 触发场景
+- Count: 出现次数
+- Validation: 已有验证证据
+- Scope: 适用范围
+- Boundary: 与现有 rules / skills 的边界
+
 ---
 
 ## Evolution Policy
@@ -340,15 +435,31 @@ Project Memory 至少应区分两类信息：
    - 否：不要为了“看起来有沉淀”强行写 memory
 
 2. 这次经验是否重复出现 >= 2 次，且步骤明确？
+   - 是：继续判断 Trigger / Validation / Scope / Boundary 是否清晰
+   - 否：最多作为 `[candidate-skill]` 记录在 project memory
+
+3. 该经验是否满足 skill 升级阈值？
+   - Trigger：触发场景清晰
+   - Count：同项目出现 >= 2 次，或跨项目出现 >= 2 次
+   - Validation：有可复现验证证据
+   - Scope：适用范围和不适用范围明确
+   - Boundary：不会吞并其他 skill / rule 职责
+   - Reusable：可重复执行，不依赖特定业务上下文
    - 是：提议升级为 skill
 
-3. 该 skill 是否被多个项目复用，且已稳定？
+4. 该 skill 是否满足 rule 升级阈值？
+   - 已作为 skill 稳定运行
+   - 跨项目可复用，通常需要 >= 3 个项目或等价证据
+   - 不依赖强业务语义
+   - 作为规范比作为流程更合适
+   - 不存在明显争议
    - 是：提议升级为 rule
 
-4. 若经验是一次性、强业务耦合、未验证：
-   - 仅写入项目 memory，不升级
+5. 若经验是一次性、强业务耦合、未验证：
+   - 仅在对当前项目后续任务有明确价值时写入 project memory，不升级
+   - 若只是临时操作、普通成功路径或未验证猜测，则不写 memory
 
-5. 若经验只是临时操作、普通成功路径、未形成明确模式：
+6. 若经验只是临时操作、普通成功路径、未形成明确模式：
    - 不写 memory，不升级
 
 所有演化判断必须尽量记录证据：
@@ -362,6 +473,8 @@ Project Memory 至少应区分两类信息：
 
 ## Safety Policy
 - 不允许自动修改 AGENTS.md
+- 例外：当用户明确要求母体架构调整、gate 定义调整、总控流程调整或 AGENTS 规则修订时，允许修改 AGENTS.md
+- 修改 AGENTS.md 前必须说明原因、影响范围和验证方式；修改后必须触发 Review Gate 或执行等价一致性检查
 - 允许新增或更新 memory
 - 修改 rules 前必须说明为什么它已足够稳定
 - 修改 skills 前必须说明复用价值
