@@ -1,0 +1,19 @@
+# Local IDE state
+.idea/
+.vscode/
+
+# Local runtime memory backend
+memory/index.db
+memory/index.db-*
+memory/*.sqlite
+memory/*.sqlite-*
+
+# Runtime/session artifacts
+sessions/
+logs/
+temp/
+*.lock
+
+# Python cache
+__pycache__/
+*.pyc

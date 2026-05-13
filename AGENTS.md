@@ -288,10 +288,11 @@ Quality Assurance:
 3. rules/testing.md
 4. rules/change-policy.md
 5. rules/review-gate.md（仅在触发 review gate 时）
-6. 对应技术栈 rules
-7. 对应 skills
-8. memory/global/preferences.md
-9. memory/projects/{project}.md
+6. rules/memory-enhanced.md（仅在需要长期记忆检索或记录时）
+7. 对应技术栈 rules
+8. 对应 skills
+9. memory/global/preferences.md
+10. memory/projects/{project}.md
 
 如有冲突，优先级从上到下递减。
 
@@ -427,6 +428,24 @@ Candidate 必须记录：
 - Validation: 已有验证证据
 - Scope: 适用范围
 - Boundary: 与现有 rules / skills 的边界
+
+### SQLite Memory Backend
+若仓库提供 `memory/schema.sql` 与 `scripts/memory-tools.py`，允许使用 SQLite memory backend 作为可选检索与索引层。
+
+SQLite memory backend 用途：
+- 检索过去做过的相关功能、踩过的坑、决策和模式
+- 记录结构化 memory item
+- 跟踪 candidate skill
+- 记录 session 摘要和 skill usage
+
+边界：
+- Markdown memory 仍是人类可读、Git 可审查的主要记忆层
+- `memory/index.db` 是本地运行态，禁止提交
+- 不记录 raw full trajectory
+- 不基于数据库内容自动创建 skill、升级 rule 或修改 AGENTS.md
+- 任何 skill / rule / AGENTS 修改仍必须满足 Evolution Policy 与 Review Gate
+
+使用细则见 `rules/memory-enhanced.md` 与 `tools/memory-tools.md`。
 
 ---
 

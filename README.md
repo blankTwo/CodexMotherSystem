@@ -84,6 +84,7 @@ Codex Mother System 的目标是把这些问题收束到一套稳定机制里：
 │   ├── testing.md
 │   ├── change-policy.md
 │   ├── evolution.md
+│   ├── memory-enhanced.md
 │   ├── review-gate.md
 │   ├── ui-design-system.md
 │   ├── frontend-react.md
@@ -100,8 +101,13 @@ Codex Mother System 的目标是把这些问题收束到一套稳定机制里：
 │   ├── ui-refine/
 │   └── write-tests/
 └── memory/
+    ├── schema.sql
     ├── global/
     └── projects/
+├── scripts/
+│   └── memory-tools.py
+└── tools/
+    └── memory-tools.md
 ```
 
 放到具体项目中使用时，推荐放在目标项目的 `.codex/` 目录：
@@ -194,6 +200,94 @@ your-project/
 简单任务可以简短完成这些判断；复杂任务必须完整经过 gate。
 
 性能不单独作为第 6 个 gate，而是在 `Risk Gate` 和 `Validation Gate` 中作为专项检查处理。
+
+## Hermes-like Memory Backend
+
+系统提供可选的 SQLite-backed memory backend，用于更接近 Hermes Agent 的长期记忆检索和受控自我成长。
+
+这里的“记忆”不是自动读取完整聊天记录，也不是凭空知道过去发生了什么。它依赖任务结束后的结构化沉淀：把已完成的功能、踩过的坑、架构决策、验证结果记录为可检索 memory item。后续任务开始时，Agent 再通过 Context Gate 搜索这些记录，从而“记得以前做过相关功能”。
+
+它解决的问题：
+
+- 记住以前做过的相关功能
+- 检索以前踩过的坑和解决方案
+- 记录架构决策、UI 模式、验证经验
+- 跟踪 candidate skill，而不是自动创建 skill
+- 记录 session 摘要和 skill 使用结果
+
+数据库生成方式：
+
+- 克隆或复制 `.codex/` 后，不会立刻生成 SQLite 数据库。
+- 首次调用 `scripts/memory-tools.py` 的任意命令时，会自动创建 `memory/index.db` 并应用 `memory/schema.sql`。
+- `init` 是显式初始化和健康检查命令，不是必须先执行的安装步骤。
+- 如果只手动编辑 Markdown memory 文件，不调用 memory tools，则不会生成 SQLite 数据库。
+
+显式检查：
+
+```bash
+python scripts/memory-tools.py init
+```
+
+搜索历史经验：
+
+```bash
+python scripts/memory-tools.py search "login viewport overflow"
+```
+
+搜索真实报错或带符号的文本也可以，脚本会自动把普通输入转换为安全的 FTS5 查询：
+
+```bash
+python scripts/memory-tools.py search "5MB -> 4.5MB upload display"
+```
+
+记录结构化经验：
+
+```bash
+python scripts/memory-tools.py record-item \
+  --project my-project \
+  --type lesson \
+  --title "Login page overflow at 1024x768" \
+  --summary "Brand typography and spacing caused unnecessary scroll." \
+  --solution "Use ui-design-system type scale and viewport checks." \
+  --tags ui login viewport \
+  --validation "Checked 1024x768, 1280x800, and 1440x900."
+```
+
+记录已实现功能：
+
+```bash
+python scripts/memory-tools.py record-item \
+  --project my-project \
+  --type feature \
+  --title "Login flow with dashboard entry" \
+  --summary "Implemented split login page, mock login action, and dashboard entry." \
+  --patterns auth-layout dashboard-entry route-flow \
+  --files src/pages/Login.tsx src/pages/Dashboard.tsx \
+  --tags auth ui routing \
+  --validation "Verified login click enters dashboard."
+```
+
+记录候选 skill：
+
+```bash
+python scripts/memory-tools.py candidate-upsert \
+  --name viewport-fit-auth-layout \
+  --project "*" \
+  --trigger "Auth or single-task page uses split layout and must avoid unnecessary viewport scroll." \
+  --evidence "Repeated login page overflow caused by oversized brand typography and padding." \
+  --validation "Resolved by design-system type scale and common viewport checks." \
+  --scope "Login, register, forgot password, simple settings pages." \
+  --boundary "Not for long-form onboarding or content-heavy pages." \
+  --tags ui auth viewport
+```
+
+边界：
+
+- `memory/index.db` 是本地索引，已被 `.gitignore` 忽略
+- `memory/schema.sql`、`scripts/memory-tools.py`、`tools/memory-tools.md` 可以提交和审查
+- Markdown memory 仍是人类可读、Git 可审查的主要记忆层
+- SQLite 不会自动修改 skill、rule 或 AGENTS
+- skill/rule 升级仍然必须经过 Review Gate 或用户确认
 
 ## 隔离机制
 
