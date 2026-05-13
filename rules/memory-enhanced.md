@@ -3,7 +3,7 @@
 ## Goal
 Add Hermes-like long-term memory and retrieval while keeping Codex Mother System lightweight, reviewable, and controlled.
 
-This rule enhances Memory Gate. It does not replace Markdown memory, Evolution Policy, or Review Gate.
+This rule strengthens Memory Gate. It does not replace Markdown memory, Evolution Policy, or Review Gate.
 
 ---
 
@@ -24,7 +24,7 @@ Use both layers when available:
    - Fast retrieval and structured indexing
    - Managed through `scripts/memory-tools.py`
 
-If `scripts/memory-tools.py` or `memory/schema.sql` is unavailable, continue using Markdown memory.
+If `scripts/memory-tools.py` or `memory/schema.sql` is unavailable, continue using Markdown memory and report the missing SQLite recording in the final response.
 
 ---
 
@@ -40,6 +40,12 @@ python scripts/memory-tools.py search "<query>" --project <project>
 ```
 
 The first search may create `memory/index.db` automatically. This is expected. The database remains local and must not be committed.
+
+If SQLite search returns no results but Markdown memory has existing records, the project may be an older project that has not been indexed yet. Run Markdown import before concluding there is no history:
+
+```bash
+python scripts/memory-tools.py import-markdown --project <project>
+```
 
 Useful queries include:
 - feature name
@@ -66,6 +72,106 @@ At task completion, after Validation Gate, decide:
 5. Is it only a candidate skill?
 6. Does it meet existing Evolution Policy thresholds?
 7. Is Review Gate required before updating a skill or rule?
+8. Did required SQLite recording actually run, or is there a stated reason it could not run?
+
+---
+
+## Mandatory SQLite Recording
+
+When `memory/schema.sql` and `scripts/memory-tools.py` exist, SQLite recording is mandatory for high-signal tasks.
+
+At task completion, run at least `record-session` when any of these are true:
+- API contract changed: route, request params, response shape, auth, errors, backend behavior
+- Data model changed: table, collection, schema, migration, query, cache, consistency rule
+- Cross-module or cross-layer flow changed: frontend/backend integration, SDK, webhook, service boundary
+- Bugfix has a clear root cause, repeated symptom, regression risk, or future diagnostic value
+- A reusable implementation pattern, UI pattern, architecture decision, validation lesson, or project constraint was discovered
+- Mother system files changed: `AGENTS.md`, `rules/`, `skills/`, memory policy, or memory tooling
+- User explicitly asks to remember, record,沉淀, or use later
+
+Also run `record-item` when the task produced any of these:
+- `lesson`: verified pitfall and fix
+- `feature`: implemented feature or flow that future work may resemble
+- `decision`: architecture/API/data/UI decision and rationale
+- `pattern`: reusable implementation or UI pattern
+- `validation`: validation result or failure that matters later
+- `note`: stable user preference or useful context
+
+If both Markdown and SQLite apply, write both:
+- Markdown for stable, reviewable project/global context
+- SQLite for fast retrieval and structured search
+
+Do not finish silently when required SQLite recording cannot run. The final response must state:
+- why SQLite recording did not run
+- which Markdown memory was updated instead
+- the exact command that can be run later to backfill the record
+
+---
+
+## Memory Recorder Sub-Agent
+
+For complex tasks, memory writing can be delegated to a Memory Recorder sub-agent so the main agent can continue verification or user-facing completion work.
+
+Use a sub-agent when:
+- The task produced multiple memory records
+- Markdown memory and SQLite records both need updates
+- Candidate skill/rule evidence needs to be organized
+- The main task is otherwise complete and memory writing would create noticeable latency
+
+The main agent should give the sub-agent a bounded packet:
+- Project slug
+- Task summary
+- Confirmed root cause or decision
+- Files changed
+- Validation result
+- Which Markdown memory file to update, if any
+- Required SQLite commands: `record-session`, `record-item`, `candidate-upsert`
+
+Sub-agent write scope:
+- `memory/projects/{project}.md`
+- `memory/global/preferences.md` only for stable user preferences
+- SQLite via `scripts/memory-tools.py`
+
+Sub-agent must not:
+- Touch business code
+- Modify rules, skills, or `AGENTS.md`
+- Record unverified guesses
+- Promote candidates without Review Gate
+
+The main agent remains accountable. Before final response, it must know whether memory recording completed. If it did not complete, final must include the reason and the backfill commands.
+
+---
+
+## Existing Markdown Import
+
+Older projects may already have useful `memory/projects/*.md` files but no SQLite index.
+
+When an older project has Markdown memory and SQLite search returns no relevant results, import the Markdown memory:
+
+```bash
+python scripts/memory-tools.py import-markdown --project <project>
+```
+
+For migration across all project memories:
+
+```bash
+python scripts/memory-tools.py import-markdown --all-projects
+```
+
+Use dry-run first when the memory file is large or unfamiliar:
+
+```bash
+python scripts/memory-tools.py import-markdown --project <project> --dry-run
+```
+
+Import behavior:
+- Splits Markdown by headings
+- Infers item type from section title/content
+- Stores the source file path in SQLite metadata
+- Marks imported items with `imported,markdown`
+- Uses stable import keys so repeated imports update rather than duplicate
+
+Imported Markdown is an index, not a new source of truth. Confirm important details against the original Markdown file before making changes.
 
 ---
 
@@ -186,6 +292,19 @@ python scripts/memory-tools.py record-session \
   --validation-summary "<validation>" \
   --memory-updated
 ```
+
+Minimum required session record for high-signal tasks:
+
+```bash
+python scripts/memory-tools.py record-session \
+  --project <project> \
+  --task-summary "<what changed>" \
+  --key-decisions "<important decisions or none>" \
+  --validation-summary "<how it was verified or why it could not be verified>" \
+  --memory-updated
+```
+
+If the task changed only workflow or rules and no project memory Markdown was updated, omit `--memory-updated` only when no Markdown memory changed. The SQLite session record is still required when the mandatory triggers apply.
 
 ---
 

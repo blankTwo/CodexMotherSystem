@@ -203,7 +203,7 @@ your-project/
 
 ## Hermes-like Memory Backend
 
-系统提供可选的 SQLite-backed memory backend，用于更接近 Hermes Agent 的长期记忆检索和受控自我成长。
+系统提供 SQLite-backed memory backend，用于更接近 Hermes Agent 的长期记忆检索和受控自我成长。
 
 这里的“记忆”不是自动读取完整聊天记录，也不是凭空知道过去发生了什么。它依赖任务结束后的结构化沉淀：把已完成的功能、踩过的坑、架构决策、验证结果记录为可检索 memory item。后续任务开始时，Agent 再通过 Context Gate 搜索这些记录，从而“记得以前做过相关功能”。
 
@@ -222,6 +222,14 @@ your-project/
 - `init` 是显式初始化和健康检查命令，不是必须先执行的安装步骤。
 - 如果只手动编辑 Markdown memory 文件，不调用 memory tools，则不会生成 SQLite 数据库。
 
+执行要求：
+
+- SQLite 不会自动监听 Markdown 文件变化，写入 Markdown memory 不会自动同步到 `index.db`。
+- 当任务涉及接口、数据模型、跨模块链路、重复 bug、可复用决策、母体规则调整，或用户明确要求“记住/沉淀/记录”时，任务结束前必须执行 `record-session`。
+- 当任务产生可复用经验、已实现功能记录、踩坑修复、重要决策或稳定用户偏好时，还必须执行 `record-item`。
+- 复杂任务可以把 memory 写入委派给 Memory Recorder 子代理并行处理，但主 Agent 最终仍要确认记录完成。
+- 如果工具不可用或执行失败，最终回复必须说明原因，并给出后续可补执行的命令。
+
 显式检查：
 
 ```bash
@@ -239,6 +247,20 @@ python scripts/memory-tools.py search "login viewport overflow"
 ```bash
 python scripts/memory-tools.py search "5MB -> 4.5MB upload display"
 ```
+
+导入老项目已有 Markdown memory：
+
+```bash
+python scripts/memory-tools.py import-markdown --project my-project
+```
+
+批量导入所有项目 memory：
+
+```bash
+python scripts/memory-tools.py import-markdown --all-projects
+```
+
+导入是幂等的，重复执行会更新已有导入记录，不会制造重复项。导入后的 SQLite 记录只是检索索引，重要细节仍应回到 Markdown 原文确认。
 
 记录结构化经验：
 

@@ -8,6 +8,7 @@ memory backend can run in a fresh project without dependency installation.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sqlite3
@@ -20,6 +21,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "memory" / "index.db"
 DEFAULT_SCHEMA = ROOT / "memory" / "schema.sql"
+PROJECT_MEMORY_DIR = ROOT / "memory" / "projects"
 
 MEMORY_TYPES = (
     "lesson",
@@ -44,7 +46,32 @@ def ensure_initialized(conn: sqlite3.Connection, schema_path: Path = DEFAULT_SCH
     if not schema_path.exists():
         raise SystemExit(f"Schema file not found: {schema_path}")
     conn.executescript(schema_path.read_text(encoding="utf-8"))
+    migrate_schema(conn)
     conn.commit()
+
+
+def column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(row["name"] == column for row in rows)
+
+
+def migrate_schema(conn: sqlite3.Connection) -> None:
+    if not column_exists(conn, "memory_items", "import_key"):
+        conn.execute("ALTER TABLE memory_items ADD COLUMN import_key TEXT")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_items_import_key
+        ON memory_items(import_key)
+        WHERE import_key IS NOT NULL
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO schema_meta(key, value)
+        VALUES ('schema_version', '2')
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+        """
+    )
 
 
 def normalize_csv(values: list[str] | None) -> str | None:
@@ -57,6 +84,14 @@ def normalize_csv(values: list[str] | None) -> str | None:
             if part:
                 flattened.append(part)
     return ",".join(dict.fromkeys(flattened)) if flattened else None
+
+
+def normalize_project_slug(value: str) -> str:
+    value = value.strip().lower()
+    value = re.sub(r"[\s_]+", "-", value)
+    value = re.sub(r"[^a-z0-9.\-\u4e00-\u9fff]+", "-", value)
+    value = value.strip(".-")
+    return value or "unknown-project"
 
 
 def print_json(data: Any) -> None:
@@ -86,6 +121,87 @@ def build_safe_fts_query(query: str) -> str:
 
 def like_pattern(query: str) -> str:
     return f"%{query.replace('%', r'\%').replace('_', r'\_')}%"
+
+
+def split_markdown_sections(text: str) -> list[dict[str, str]]:
+    sections: list[dict[str, str]] = []
+    current_title = "Document"
+    current_level = 0
+    current_lines: list[str] = []
+    heading_pattern = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
+    def flush() -> None:
+        body = "\n".join(current_lines).strip()
+        if body:
+            sections.append(
+                {
+                    "title": current_title.strip(),
+                    "level": str(current_level),
+                    "body": body,
+                }
+            )
+
+    for line in text.splitlines():
+        match = heading_pattern.match(line)
+        if match:
+            flush()
+            current_title = match.group(2).strip()
+            current_level = len(match.group(1))
+            current_lines = []
+            continue
+        current_lines.append(line)
+    flush()
+    return sections
+
+
+def infer_memory_type(title: str, body: str) -> str:
+    haystack = f"{title}\n{body}".lower()
+    if any(token in haystack for token in ("pitfall", "bug", "root cause", "fix:", "踩坑", "问题", "修复")):
+        return "lesson"
+    if any(token in haystack for token in ("decision", "rationale", "reason:", "决策", "决定", "原因")):
+        return "decision"
+    if any(token in haystack for token in ("pattern", "trigger:", "scope:", "模式", "复用")):
+        return "pattern"
+    if any(token in haystack for token in ("validation", "verified", "验证", "待验证")):
+        return "validation"
+    if any(token in haystack for token in ("feature", "flow", "done:", "功能", "流程")):
+        return "feature"
+    return "note"
+
+
+def summarize_markdown_body(body: str, max_chars: int = 500) -> str:
+    lines = [line.strip(" -\t") for line in body.splitlines()]
+    compact = " ".join(line for line in lines if line)
+    if not compact:
+        compact = body.strip()
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 3].rstrip() + "..."
+
+
+def markdown_import_key(project: str, path: Path, title: str, body: str) -> str:
+    digest = hashlib.sha256(f"{project}\n{path.as_posix()}\n{title}\n{body}".encode("utf-8")).hexdigest()
+    return f"markdown:{project}:{digest[:24]}"
+
+
+def default_project_from_path(path: Path) -> str:
+    return normalize_project_slug(path.stem)
+
+
+def should_skip_project_memory(path: Path) -> bool:
+    return path.name in {"_template.md", "_index.md"}
+
+
+def resolve_workspace_path(path: Path) -> Path:
+    return path if path.is_absolute() else ROOT / path
+
+
+def workspace_relative(path: Path) -> Path:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT)
+    except ValueError:
+        return resolved
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -131,9 +247,10 @@ def cmd_record_item(args: argparse.Namespace) -> None:
                 validation,
                 confidence,
                 source_session,
+                import_key,
                 metadata_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 args.project,
@@ -148,6 +265,7 @@ def cmd_record_item(args: argparse.Namespace) -> None:
                 args.validation,
                 args.confidence,
                 args.source_session,
+                None,
                 metadata_json,
             ),
         )
@@ -465,6 +583,185 @@ def cmd_record_skill_usage(args: argparse.Namespace) -> None:
     print_json({"ok": True, "id": cur.lastrowid, "skill_name": args.skill_name})
 
 
+def import_markdown_file(
+    conn: sqlite3.Connection,
+    path: Path,
+    project: str,
+    *,
+    dry_run: bool = False,
+    include_empty: bool = False,
+) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    sections = split_markdown_sections(text)
+    imported: list[dict[str, Any]] = []
+    skipped = 0
+
+    for section in sections:
+        title = section["title"]
+        body = section["body"]
+        if not include_empty:
+            normalized_body = body.strip()
+            if not normalized_body or re.fullmatch(r"[-:\s\w/]*", normalized_body):
+                skipped += 1
+                continue
+        memory_type = infer_memory_type(title, body)
+        summary = summarize_markdown_body(body)
+        source_path = workspace_relative(path)
+        import_key = markdown_import_key(project, source_path, title, body)
+        metadata = {
+            "source": "markdown-import",
+            "source_path": str(source_path.as_posix()),
+            "heading": title,
+            "heading_level": section["level"],
+        }
+        tags = normalize_csv(["imported", "markdown", memory_type])
+        record = {
+            "project": project,
+            "type": memory_type,
+            "title": title,
+            "summary": summary,
+            "tags": tags,
+            "validation": "Imported from existing Markdown memory; verify against source before relying on it.",
+            "confidence": 0.6,
+            "import_key": import_key,
+            "metadata_json": json.dumps(metadata, ensure_ascii=False),
+        }
+        if not dry_run:
+            existing = conn.execute(
+                "SELECT id FROM memory_items WHERE import_key = ?",
+                (record["import_key"],),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE memory_items
+                    SET
+                        type = ?,
+                        title = ?,
+                        summary = ?,
+                        files = ?,
+                        tags = ?,
+                        validation = ?,
+                        confidence = ?,
+                        metadata_json = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (
+                        record["type"],
+                        record["title"],
+                        record["summary"],
+                        str(source_path.as_posix()),
+                        record["tags"],
+                        record["validation"],
+                        record["confidence"],
+                        record["metadata_json"],
+                        existing["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO memory_items(
+                        project,
+                        type,
+                        title,
+                        summary,
+                        problem,
+                        solution,
+                        patterns,
+                        files,
+                        tags,
+                        validation,
+                        confidence,
+                        source_session,
+                        import_key,
+                        metadata_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record["project"],
+                        record["type"],
+                        record["title"],
+                        record["summary"],
+                        None,
+                        None,
+                        None,
+                        str(source_path.as_posix()),
+                        record["tags"],
+                        record["validation"],
+                        record["confidence"],
+                        None,
+                        record["import_key"],
+                        record["metadata_json"],
+                    ),
+                )
+        imported.append(record)
+
+    return {
+        "file": str(path),
+        "project": project,
+        "imported": len(imported),
+        "skipped": skipped,
+        "items": imported,
+    }
+
+
+def cmd_import_markdown(args: argparse.Namespace) -> None:
+    args.memory_dir = resolve_workspace_path(args.memory_dir)
+    if args.file:
+        args.file = resolve_workspace_path(args.file)
+
+    if args.all_projects:
+        files = sorted(path for path in args.memory_dir.glob("*.md") if not should_skip_project_memory(path))
+    else:
+        if args.file:
+            files = [args.file]
+        elif args.project:
+            files = [args.memory_dir / f"{normalize_project_slug(args.project)}.md"]
+        else:
+            raise SystemExit("Expected --project, --file, or --all-projects")
+
+    missing = [str(path) for path in files if not path.exists()]
+    if missing:
+        raise SystemExit(f"Markdown memory file not found: {', '.join(missing)}")
+
+    results: list[dict[str, Any]] = []
+    with connect(args.db) as conn:
+        ensure_initialized(conn, args.schema)
+        for path in files:
+            project = normalize_project_slug(args.project) if args.project and len(files) == 1 else default_project_from_path(path)
+            results.append(
+                import_markdown_file(
+                    conn,
+                    path,
+                    project,
+                    dry_run=args.dry_run,
+                    include_empty=args.include_empty,
+                )
+            )
+        if not args.dry_run:
+            conn.execute(
+                "INSERT INTO maintenance_log(action, details) VALUES (?, ?)",
+                ("import-markdown", f"files={len(files)} dry_run={args.dry_run}"),
+            )
+            conn.commit()
+
+    print_json(
+        {
+            "ok": True,
+            "dry_run": args.dry_run,
+            "files": len(files),
+            "imported": sum(result["imported"] for result in results),
+            "skipped": sum(result["skipped"] for result in results),
+            "results": results if args.verbose or args.dry_run else [
+                {key: value for key, value in result.items() if key != "items"} for result in results
+            ],
+        }
+    )
+
+
 def cmd_stats(args: argparse.Namespace) -> None:
     with connect(args.db) as conn:
         ensure_initialized(conn, args.schema)
@@ -605,6 +902,17 @@ def build_parser() -> argparse.ArgumentParser:
     usage_parser.add_argument("--success", action="store_true")
     usage_parser.add_argument("--notes")
     usage_parser.set_defaults(func=cmd_record_skill_usage)
+
+    import_parser = subparsers.add_parser("import-markdown", help="Import existing Markdown memory into SQLite")
+    add_common_args(import_parser)
+    import_parser.add_argument("--project", help="Project slug to import from memory/projects/<project>.md")
+    import_parser.add_argument("--file", type=Path, help="Specific Markdown memory file to import")
+    import_parser.add_argument("--all-projects", action="store_true", help="Import all project memory Markdown files")
+    import_parser.add_argument("--memory-dir", type=Path, default=PROJECT_MEMORY_DIR, help="Project memory directory")
+    import_parser.add_argument("--dry-run", action="store_true", help="Preview import without writing to SQLite")
+    import_parser.add_argument("--include-empty", action="store_true", help="Import placeholder-like sections too")
+    import_parser.add_argument("--verbose", action="store_true", help="Include imported item details in output")
+    import_parser.set_defaults(func=cmd_import_markdown)
 
     stats_parser = subparsers.add_parser("stats", help="Show memory backend stats")
     add_common_args(stats_parser)

@@ -223,8 +223,48 @@ Quality Assurance:
 任务结束时必须判断：
 - 是否需要写入 project memory
 - 是否需要写入 global memory
+- 是否必须执行 SQLite memory 记录
 - 是否只是一次性经验，不应沉淀
 - 是否只是演化候选，暂不升级为 skill / rule
+
+若仓库存在 `memory/schema.sql` 与 `scripts/memory-tools.py`，SQLite memory 不是普通建议，而是 Memory Gate 的结构化记录层。
+
+满足以下任一条件时，任务结束前必须至少执行一次 `record-session`：
+- 修改或新增后端接口、请求/响应结构、鉴权、错误码
+- 修改或新增数据库表、collection、schema、migration、查询或数据一致性逻辑
+- 新增跨模块业务链路、跨层集成、第三方服务或 SDK 接入
+- 修复重复出现、根因明确或后续可能复现的 bug
+- 形成可复用设计决策、架构决策、UI 模式、验证经验或项目约束
+- 更新 rules、skills、AGENTS、memory policy 或母体系统机制
+- 用户明确要求“记住”“沉淀”“记录”“以后参考”
+
+若本次产生可复用经验、已实现功能记录、踩坑修复、重要决策或稳定用户偏好，除 `record-session` 外还必须执行 `record-item`。
+
+### Memory Recorder Sub-Agent
+当任务复杂、记忆内容较多，或写 memory 会明显拖慢主业务交付时，建议把记忆沉淀委派给子代理并行处理。
+
+适用场景：
+- 大型 bugfix / feature / refactor 已经形成清晰结论，主 Agent 还需要继续验证或收尾
+- 需要同时写 Markdown memory、SQLite `record-session`、多个 `record-item`
+- 需要从本次任务中提炼 candidate skill / rule，但不希望阻塞主实现
+- 用户明确希望减少“业务完成后等待写记忆”的拖尾时间
+
+子代理边界：
+- 只负责 memory 写入、SQLite 记录、候选经验整理
+- 不修改业务代码
+- 不修改 `AGENTS.md` / `rules/` / `skills/`，除非用户明确要求
+- 不基于未验证推断写入长期记忆
+- 必须使用主 Agent 提供的事实摘要、验证结果和文件路径，不重新发明结论
+
+主 Agent 仍然负责：
+- 提供准确的 task summary / decisions / validation / files
+- 在 final 前确认子代理已完成，或说明未完成原因和补执行命令
+- 保证 Memory Gate 没有因为委派而被跳过
+
+若 SQLite 工具不可用、执行失败或当前环境无法运行 Python，必须在 final 中说明：
+- 未执行 SQLite 记录的原因
+- 已写入的 Markdown memory 位置
+- 后续可补执行的 `memory-tools.py` 命令
 
 ---
 
@@ -453,7 +493,7 @@ Candidate 必须记录：
 - Boundary: 与现有 rules / skills 的边界
 
 ### SQLite Memory Backend
-若仓库提供 `memory/schema.sql` 与 `scripts/memory-tools.py`，允许使用 SQLite memory backend 作为可选检索与索引层。
+若仓库提供 `memory/schema.sql` 与 `scripts/memory-tools.py`，必须将 SQLite memory backend 作为 Memory Gate 的结构化记录层使用。
 
 SQLite memory backend 用途：
 - 检索过去做过的相关功能、踩过的坑、决策和模式
@@ -467,6 +507,7 @@ SQLite memory backend 用途：
 - 不记录 raw full trajectory
 - 不基于数据库内容自动创建 skill、升级 rule 或修改 AGENTS.md
 - 任何 skill / rule / AGENTS 修改仍必须满足 Evolution Policy 与 Review Gate
+- SQLite 记录不能替代 Markdown 中稳定项目上下文或全局偏好，但可以作为检索索引和结构化补充
 
 使用细则见 `rules/memory-enhanced.md` 与 `tools/memory-tools.md`。
 
@@ -558,3 +599,4 @@ SQLite memory backend 用途：
 - Risk Gate 是否完成：plan / worktree / TDD / review / rollback 是否判断过
 - Validation Gate 是否完成：验证方式、验证结果、剩余风险是否说明
 - Memory Gate 是否完成：是否需要写 memory，是否只是演化候选
+- SQLite memory 是否按强制条件执行：是否需要 `record-session`，是否需要 `record-item`，若未执行是否说明原因

@@ -2,7 +2,9 @@
 
 These tools provide a real SQLite-backed memory backend for Codex Mother System.
 
-They are optional. Markdown memory remains the reviewable source of truth. The SQLite backend provides fast retrieval, structured memory indexing, candidate skill tracking, session summaries, and skill usage analytics.
+Markdown memory remains the reviewable source of truth. The SQLite backend provides fast retrieval, structured memory indexing, candidate skill tracking, session summaries, and skill usage analytics.
+
+The tools are not triggered by editing Markdown files. Agents must call the commands explicitly when Memory Gate requires SQLite recording.
 
 ---
 
@@ -21,6 +23,49 @@ python scripts/memory-tools.py init
 ```
 
 This creates `memory/index.db`, applies `memory/schema.sql`, and lists available tables.
+
+---
+
+## Required Recording Triggers
+
+Run `record-session` before final response when a task includes any of these:
+- API contract, backend behavior, auth, error code, or response shape changes
+- Database table, collection, schema, migration, query, cache, or consistency changes
+- Cross-module or cross-layer feature flow changes
+- Bugfix with clear root cause, repeat risk, or future diagnostic value
+- Reusable implementation pattern, UI pattern, decision, validation lesson, or project constraint
+- Mother system changes to `AGENTS.md`, `rules/`, `skills/`, memory policy, or memory tooling
+- User explicitly asks to remember, record, or沉淀 something
+
+Run `record-item` as well when the task produced a reusable lesson, feature, decision, pattern, validation result, or stable user preference.
+
+If the tool cannot run, say so in the final response and include the command that can backfill the record later.
+
+---
+
+## Memory Recorder Sub-Agent
+
+For complex tasks, the main agent may delegate memory writing to a Memory Recorder sub-agent.
+
+The sub-agent should receive:
+- project slug
+- task summary
+- confirmed root cause or decision
+- changed files
+- validation result
+- exact memory commands to run
+
+The sub-agent may run:
+
+```bash
+python scripts/memory-tools.py record-session ...
+python scripts/memory-tools.py record-item ...
+python scripts/memory-tools.py candidate-upsert ...
+```
+
+The sub-agent may update Markdown memory when instructed, but must not modify business code, rules, skills, or `AGENTS.md`.
+
+The main agent must verify that the memory work completed before final response. If it did not complete, the final response must include the backfill commands.
 
 ---
 
@@ -50,6 +95,40 @@ Search uses SQLite FTS5 over:
 - project
 
 Use search during Context Gate when the task resembles prior work or prior failures.
+
+---
+
+## Import Existing Markdown Memory
+
+Older projects may already have `memory/projects/<project>.md` but no `memory/index.db`. Search will create an empty database, but it cannot automatically know what is inside existing Markdown files until you import them.
+
+Preview import:
+
+```bash
+python scripts/memory-tools.py import-markdown --project my-project --dry-run
+```
+
+Import one project:
+
+```bash
+python scripts/memory-tools.py import-markdown --project my-project
+```
+
+Import a specific file:
+
+```bash
+python scripts/memory-tools.py import-markdown --file memory/projects/my-project.md
+```
+
+Import all project memory files:
+
+```bash
+python scripts/memory-tools.py import-markdown --all-projects
+```
+
+The import is idempotent: repeated imports update existing imported records instead of creating duplicates.
+
+Imported records are tagged with `imported,markdown`. Treat them as a search index and verify important details against the Markdown source.
 
 ---
 

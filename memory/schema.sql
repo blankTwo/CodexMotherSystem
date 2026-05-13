@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 );
 
 INSERT INTO schema_meta(key, value)
-VALUES ('schema_version', '1')
+VALUES ('schema_version', '2')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now');
 
 CREATE TABLE IF NOT EXISTS memory_items (
@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS memory_items (
     validation TEXT,
     confidence REAL NOT NULL DEFAULT 0.8 CHECK (confidence >= 0 AND confidence <= 1),
     source_session TEXT,
+    import_key TEXT,
     metadata_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -42,6 +43,9 @@ CREATE INDEX IF NOT EXISTS idx_memory_items_project ON memory_items(project);
 CREATE INDEX IF NOT EXISTS idx_memory_items_type ON memory_items(type);
 CREATE INDEX IF NOT EXISTS idx_memory_items_created_at ON memory_items(created_at);
 CREATE INDEX IF NOT EXISTS idx_memory_items_tags ON memory_items(tags);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_items_import_key
+ON memory_items(import_key)
+WHERE import_key IS NOT NULL;
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
     title,
