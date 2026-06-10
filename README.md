@@ -118,7 +118,9 @@ your-project/
 │   ├── AGENTS.md
 │   ├── rules/
 │   ├── skills/
-│   └── memory/
+│   ├── memory/
+│   ├── scripts/
+│   └── tools/
 └── ...
 ```
 
@@ -126,22 +128,24 @@ your-project/
 
 ### 方式一：复制到目标项目 `.codex/`
 
-适合大多数项目。把本仓库中的核心文件放到目标项目的 `.codex/` 目录下：
+适合大多数项目。把本仓库完整放到目标项目的 `.codex/` 目录下：
 
 ```text
 .codex/
 ├── AGENTS.md
 ├── rules/
 ├── skills/
-└── memory/
+├── memory/
+├── scripts/
+└── tools/
 ```
 
 步骤：
 
 1. 在目标项目根目录创建 `.codex/`。
-2. 将本仓库的 `AGENTS.md`、`rules/`、`skills/`、`memory/` 放入目标项目 `.codex/`。
+2. 将本仓库的全部内容放入目标项目 `.codex/`，至少包含 `AGENTS.md`、`rules/`、`skills/`、`memory/`、`scripts/` 和 `tools/`。
 3. 在 Codex 或兼容的 AI Coding Agent 中打开目标项目。
-4. Agent 会通过 `.codex/AGENTS.md` 识别项目、技术栈、任务层，并按需加载 rules / skills / memory。
+4. Agent 会通过 `.codex/AGENTS.md` 识别项目、技术栈、任务层，并按需加载 rules / skills / memory；SQLite memory 工具由 `.codex/scripts/memory-tools.py` 提供。
 
 ### 方式二：直接把仓库克隆为 `.codex`
 
@@ -159,7 +163,9 @@ your-project/
 │   ├── AGENTS.md
 │   ├── rules/
 │   ├── skills/
-│   └── memory/
+│   ├── memory/
+│   ├── scripts/
+│   └── tools/
 ├── src/
 ├── package.json
 └── ...
