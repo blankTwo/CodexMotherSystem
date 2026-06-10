@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SQLite-backed memory tools for Codex Mother System.
+"""SQLite-backed memory tools for Codex Agent OS.
 
 This script intentionally uses only Python standard library modules so the
 memory backend can run in a fresh project without dependency installation.
@@ -816,7 +816,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Codex Mother System memory tools")
+    parser = argparse.ArgumentParser(description="Codex Agent OS memory tools")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser("init", help="Initialize memory database")

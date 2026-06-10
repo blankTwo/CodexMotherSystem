@@ -54,6 +54,6 @@
 - Name: Memory Promotion Threshold
 - Trigger: 任务结束后的 Memory Gate
 - Pattern: 只有重复出现、已验证、有明确边界的经验才升级；普通成功路径、一次性操作和未验证偏好不写或不升级
-- Why: 防止母体系统越沉淀越臃肿，保持 rule / skill 可执行
+- Why: 防止 Agent OS 越沉淀越臃肿，保持 rule / skill 可执行
 - Validation: rules/evolution.md 已增加 Do Not Record / Do Not Promote 约束
 - Caution: 不要因为“看起来有价值”就升级，必须记录 Trigger / Count / Validation / Scope

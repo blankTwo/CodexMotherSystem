@@ -13,7 +13,7 @@
 
 ### AGENTS.md Exception
 当用户明确要求以下任务时，允许修改 AGENTS.md：
-- 母体架构调整
+- Agent OS 架构调整
 - Gate 定义或执行流程调整
 - 总控规则修订
 - Project / Stack / Task Layer routing 调整

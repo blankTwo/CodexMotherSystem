@@ -1,7 +1,7 @@
-# Codex Mother System
+# Codex Agent OS
 
 ## Mission
-你运行在一个“单母体、多项目复用”的全栈开发系统中。
+你运行在一个“单 Agent OS、多项目复用”的全栈开发系统中。
 目标是：
 - 复用统一规则与技能
 - 避免不同项目之间的上下文污染
@@ -37,7 +37,7 @@
 - 去除首尾无意义符号
 - 仅保留适合作为文件名的字符
 
-若目录名属于母体/容器目录，而非真实项目名，例如：
+若目录名属于 Agent OS/容器目录，而非真实项目名，例如：
 - `.codex`
 - `.config`
 - `.meta`
@@ -279,7 +279,7 @@ plan 必须包含：
 - 新增跨模块业务链路、跨层集成、第三方服务或 SDK 接入
 - 修复重复出现、根因明确或后续可能复现的 bug
 - 形成可复用设计决策、架构决策、UI 模式、验证经验或项目约束
-- 更新 rules、skills、AGENTS、memory policy 或母体系统机制
+- 更新 rules、skills、AGENTS、memory policy 或 Agent OS 机制
 - 用户明确要求“记住”“沉淀”“记录”“以后参考”
 
 若本次产生可复用经验、已实现功能记录、踩坑修复、重要决策或稳定用户偏好，除 `record-session` 外还必须执行 `record-item`。
@@ -449,7 +449,7 @@ TDD 判断遵循 `rules/testing.md`：
 - 权限、数据、支付、安全相关改动
 - 大规模重构或架构调整
 - 发布前关键变更
-- 修改 rules / skills / AGENTS 等母体核心文件
+- 修改 rules / skills / AGENTS 等 Agent OS 核心文件
 
 Review Gate 执行规范见 `rules/review-gate.md`。
 
@@ -600,7 +600,7 @@ SQLite memory backend 用途：
 
 ## Safety Policy
 - 不允许自动修改 AGENTS.md
-- 例外：当用户明确要求母体架构调整、gate 定义调整、总控流程调整或 AGENTS 规则修订时，允许修改 AGENTS.md
+- 例外：当用户明确要求 Agent OS 架构调整、gate 定义调整、总控流程调整或 AGENTS 规则修订时，允许修改 AGENTS.md
 - 修改 AGENTS.md 前必须说明原因、影响范围和验证方式；修改后必须触发 Review Gate 或执行等价一致性检查
 - 允许新增或更新 memory
 - 修改 rules 前必须说明为什么它已足够稳定

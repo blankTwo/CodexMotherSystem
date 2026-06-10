@@ -1,7 +1,7 @@
 # Enhanced Memory Rules
 
 ## Goal
-Add Hermes-like long-term memory and retrieval while keeping Codex Mother System lightweight, reviewable, and controlled.
+Add Hermes-like long-term memory and retrieval while keeping Codex Agent OS lightweight, reviewable, and controlled.
 
 This rule strengthens Memory Gate. It does not replace Markdown memory, Evolution Policy, or Review Gate.
 
